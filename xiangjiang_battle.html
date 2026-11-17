@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>血战湘江 · 回合推演器</title>
+<style>
+/* 独立运行时的设计变量回退(在 Kimi 宿主中会被宿主变量覆盖) */
+:root{
+  --kimi-font-sans: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --kimi-font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+  --kimi-color-text-primary:#1f2329; --kimi-color-text-secondary:#4e5969;
+  --kimi-color-text-tertiary:#86909c; --kimi-color-text-quaternary:#c9cdd4;
+  --kimi-color-surface:#ffffff; --kimi-color-surface-muted:#f2f3f5;
+  --kimi-color-surface-raised:#ffffff; --kimi-color-surface-strong:#e5e6eb;
+  --kimi-color-border:#e5e6eb;
+  --kimi-color-danger:#d83931; --kimi-color-positive:#2ba471; --kimi-color-warning:#ff8800;
+  --kimi-color-accent:#165dff;
+  --kimi-chart-1:#165dff; --kimi-chart-2:#d83931; --kimi-chart-3:#2ba471;
+  --kimi-chart-4:#722ed1; --kimi-chart-5:#86909c;
+  --t-micro:60ms; --t-fast:120ms; --t-normal:200ms; --t-slow:300ms;
+  --ease-out:cubic-bezier(.2,.8,.4,1); --ease-in:cubic-bezier(.4,0,1,1); --ease-standard:cubic-bezier(.4,0,.2,1);
+}
+body{background:#f7f8fa;margin:0;padding:24px 12px}
+</style>
+</head>
+<body>
+
+<div id="app" style="font-family:var(--kimi-font-sans);max-width:760px;margin:0 auto;color:var(--kimi-color-text-primary)">
+<style>
+#app button{font:inherit;cursor:pointer}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.btn{border:1px solid var(--kimi-color-border);border-radius:10px;padding:8px 16px;background:transparent;color:var(--kimi-color-text-primary);font-size:14px;transition:background var(--t-fast) var(--ease-out)}
+.btn:hover{background:color-mix(in srgb,var(--kimi-color-text-primary) 6%,transparent)}
+.btn.primary{background:var(--kimi-color-text-primary);color:var(--kimi-color-surface);border-color:transparent}
+.btn.primary:hover{opacity:.85;background:var(--kimi-color-text-primary)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{padding:4px 10px;font-size:12px;border-radius:8px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:12px;line-height:18px}
+.tag-red{background:color-mix(in srgb,var(--kimi-chart-2) 14%,transparent);color:var(--kimi-chart-2)}
+.tag-gray{background:color-mix(in srgb,var(--kimi-color-text-primary) 8%,transparent);color:var(--kimi-color-text-secondary)}
+.tag-purple{background:color-mix(in srgb,var(--kimi-chart-4) 14%,transparent);color:var(--kimi-chart-4)}
+.tag-green{background:color-mix(in srgb,var(--kimi-chart-3) 14%,transparent);color:var(--kimi-chart-3)}
+.hr{height:1px;background:var(--kimi-color-border);margin:12px 0}
+.panel-wrap{position:relative;border:1px solid var(--kimi-color-border);border-radius:12px;padding:16px;margin-top:12px;background:var(--kimi-color-surface)}
+.cover{position:absolute;inset:0;background:var(--kimi-color-surface);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;cursor:pointer;text-align:center;padding:16px}
+.card{border:1px solid var(--kimi-color-border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color var(--t-fast) var(--ease-out),background var(--t-fast) var(--ease-out)}
+.card:hover{border-color:var(--kimi-color-text-tertiary)}
+.card.sel{border-color:var(--kimi-color-text-primary);background:color-mix(in srgb,var(--kimi-color-text-primary) 6%,transparent)}
+.card.dis{opacity:.4;cursor:not-allowed}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+.step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--kimi-color-text-quaternary)}
+.step.on{color:var(--kimi-color-text-primary);font-weight:500}
+.step.done{color:var(--kimi-color-text-tertiary)}
+.stepdot{width:14px;height:14px;border-radius:50%;border:1px solid var(--kimi-color-border);display:inline-flex;align-items:center;justify-content:center;font-size:9px;flex:none}
+.step.on .stepdot{border-color:var(--kimi-color-text-primary);background:var(--kimi-color-text-primary);color:var(--kimi-color-surface)}
+#log{font-family:var(--kimi-font-mono);font-size:12px;line-height:20px;color:var(--kimi-color-text-secondary);max-height:180px;overflow:auto;margin-top:12px;border-top:1px solid var(--kimi-color-border);padding-top:8px}
+.dice{width:64px;height:64px;border-radius:12px;border:1px solid var(--kimi-color-border);display:flex;align-items:center;justify-content:center;font-size:28px}
+.big{font-size:34px;font-weight:500;line-height:1.1}
+.kv{display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px dashed var(--kimi-color-border)}
+.kv:last-child{border-bottom:none}
+details{font-size:13px;color:var(--kimi-color-text-secondary);margin-top:12px}
+details summary{cursor:pointer;color:var(--kimi-color-text-tertiary);font-size:13px}
+</style>
+
+<div class="row" style="justify-content:space-between;margin-bottom:8px">
+  <div style="font-size:17px;font-weight:500">血战湘江 · 回合推演</div>
+  <div class="row" style="gap:8px">
+    <span id="roundLbl" class="tag tag-gray">第 1 / 4 回合</span>
+    <button class="btn sm" onclick="restart()">重新开始</button>
+  </div>
+</div>
+
+<div class="row" style="gap:16px;padding:12px;border:1px solid var(--kimi-color-border);border-radius:12px;background:var(--kimi-color-surface)">
+  <div><div style="font-size:12px;color:var(--kimi-color-text-tertiary)">红军兵力</div><div class="big num" id="stRed">8.5</div></div>
+  <div><div style="font-size:12px;color:var(--kimi-color-text-tertiary)">军阀总损失</div><div class="big num" id="stLoss">0</div></div>
+  <div><div style="font-size:12px;color:var(--kimi-color-text-tertiary)">群众</div><div style="font-size:16px;font-weight:500" id="stMass">在野 ×2</div></div>
+  <div><div style="font-size:12px;color:var(--kimi-color-text-tertiary)">士气</div><div style="font-size:16px;font-weight:500" id="stMorale">稳定</div></div>
+</div>
+
+<div class="row" style="gap:12px;margin-top:12px;flex-wrap:nowrap;overflow:auto" id="steps"></div>
+
+<div class="panel-wrap" id="panel"></div>
+<div id="log"></div>
+
+<details><summary>规则速览与裁决说明</summary>
+<div style="padding-top:8px;line-height:22px">
+· 红军每回合从 8 张选项卡中选 1 张，选项卡可重复选用。<br>
+· 白军每回合二选一：打出一张尚未使用的手牌，或游说本回合出动的军阀（游说成功则该军阀必定帮助白军）。<br>
+· 「一起上」：红军选 4/5/8 时扣 1.2，选 6 时只扣 0.2，其余扣 0.4。<br>
+· 「飞机轰炸」：红军选 2/4/5 时扣 1.2，否则扣 0.5。「灭杀群众」：群众出局、跳过情报，且本回合红军总扣分 ×0.75，终局不再触发士气惩罚。<br>
+· 军阀：贵州军阀首回合中立（观望扣红军 0.2）；表态帮助白军则出局且军阀总损失 +1；无论帮不帮红军固定 -0.5。<br>
+· 群众情报 1d6：1–3 红军成功（本回合「拖住」降为 -0.8，红军 +0.2）；4–6 白军成功（红军 -0.2）。<br>
+· 终局：红军兵力 &lt; 4.8 再扣 0.3（屠杀群众后不触发）。红军 &gt; 2 则红军胜；否则若 ≤ 3.5 且军阀损失 &gt; 1 则白军胜；其余为僵局。原文未规定的细节按此裁决执行。
+</div>
+</details>
+</div>
+
+<script>
+var RED_CARDS=[
+ {id:1,n:'轻装前进',s:'不带东西，加快前进',d:0.4,f:'轻装上阵跑得快'},
+ {id:2,n:'保住火炮',s:'革命武器不能破坏',d:1.0,f:'有武器才能打'},
+ {id:3,n:'连续渡江',s:'渡口一到手，主力连续通过',d:0.5,f:'快！'},
+ {id:4,n:'等待纵队',s:'等命令、等辎重、等纵队',d:1.0,f:'我同志呢？'},
+ {id:5,n:'正面阻击',s:'正面阻击蒋匪军',d:0.8,f:'活着干，死了算！'},
+ {id:6,n:'多路佯动',s:'多梯队、多方向、多佯动',d:0.3,f:'我来牵制一下'},
+ {id:7,n:'独立突围',s:'各军团独立突围',d:0.4,f:'好同志，我相信你！'},
+ {id:8,n:'听司令的',s:'统一指挥，听司令部',d:1.0,f:'得有人带着走！'}];
+var WHITE_CARDS=[
+ {id:'A',n:'拖住、耗住、压住',d:'红军 -1.0；本回合红军情报成功时仅 -0.8'},
+ {id:'B',n:'一起上，干他丫的',d:'红军 -0.4；红军选 4/5/8 时 -1.2；红军选 6 时仅 -0.2'},
+ {id:'C',n:'飞机轰炸',d:'红军 -0.5；红军选 2/4/5 时 -1.2'},
+ {id:'D',n:'灭杀群众',d:'群众出局，本回合红军总扣分减少 25%'}];
+var WARLORDS=[
+ {n:'贵州军阀',t:'开局中立，观望待机（中立观望：红军 -0.2）',neutral:true},
+ {n:'桂系军阀',t:'保存实力，摇摆不定'},
+ {n:'湘系军阀',t:'激进主战，靠拢白军'}];
+var EVENTS=['军委纵队携辎重缓慢过江，渡口拥堵。','桂军主力向兴安、全州之间收缩防线。','红军前卫部队抢占界首渡口，连夜架起浮桥。','白军飞机沿湘江低飞侦察，轰炸不断。','山路湿滑，炮车陷入泥沼，行进艰难。','地方民团向白军通报红军动向。','红军一部在光华铺与桂军展开激战。','深夜，浮桥在炮火中抢修，部队继续过江。'];
+var STEP_NAMES=['公共事件','红军选卡','白军行动','军阀表态','群众情报','结算'];
+
+var S;
+function restart(){
+ S={round:1,phase:'event',red:8.5,loss:0,mass:true,massacre:false,usedW:{},persuade:false,
+    redPick:null,whitePick:null,intel:null,calc:null,ev:EVENTS[Math.floor(Math.random()*EVENTS.length)],log:[]};
+ log('战役开始：红军 8.5 单位，目标西进湘西。');
+ render();
+}
+function log(t){S.log.unshift(t);if(S.log.length>40)S.log.pop();}
+function r1(x){return Math.round(x*10)/10}
+
+function phases(){var p=['event','red','white'];if(S.round<=3)p.push('warlord');if(S.mass)p.push('intel');p.push('settle');return p}
+
+function render(){
+ document.getElementById('stRed').textContent=r1(S.red);
+ document.getElementById('stLoss').textContent=S.loss;
+ document.getElementById('stMass').textContent=S.mass?'在野 ×2':'已被灭杀';
+ document.getElementById('stMass').style.color=S.mass?'':'var(--kimi-color-danger)';
+ document.getElementById('stMorale').textContent=S.massacre?'—':(S.red<4.8?'低落':'稳定');
+ document.getElementById('stMorale').style.color=(S.red<4.8&&!S.massacre)?'var(--kimi-color-warning)':'';
+ document.getElementById('roundLbl').textContent='第 '+S.round+' / 4 回合';
+ var ps=phases(),cur=ps.indexOf(S.phase);
+ document.getElementById('steps').innerHTML=ps.map(function(p,i){
+  var nm=STEP_NAMES[['event','red','white','warlord','intel','settle'].indexOf(p)];
+  var cls=i<cur?'done':(i===cur?'on':'');
+  var dot=i<cur?'✓':(i+1);
+  return '<span class="step '+cls+'"><span class="stepdot">'+dot+'</span>'+nm+'</span>'}).join('');
+ var P=document.getElementById('panel');
+ if(S.phase==='event')P.innerHTML=eventHtml();
+ else if(S.phase==='red')P.innerHTML=redHtml();
+ else if(S.phase==='white')P.innerHTML=whiteHtml();
+ else if(S.phase==='warlord')P.innerHTML=warlordHtml();
+ else if(S.phase==='intel')P.innerHTML=intelHtml();
+ else if(S.phase==='settle')P.innerHTML=settleHtml();
+ document.getElementById('log').innerHTML=S.log.map(function(t){return '<div>· '+t+'</div>'}).join('');
+}
+
+function cover(title,sub){return '<div class="cover" onclick="this.remove()"><div style="font-size:15px;font-weight:500">'+title+'</div><div style="font-size:12px;color:var(--kimi-color-text-tertiary)">'+sub+'</div><div style="font-size:12px;color:var(--kimi-color-text-quaternary);margin-top:8px">点击揭晓</div></div>'}
+
+function eventHtml(){
+ return '<span class="tag tag-gray">主持阶段</span><div style="font-size:15px;font-weight:500;margin:8px 0 4px">公共事件</div>'
+ +'<div style="font-size:14px;color:var(--kimi-color-text-secondary);line-height:22px;padding:12px;border:1px dashed var(--kimi-color-border);border-radius:10px">'+S.ev+'</div>'
+ +'<div class="hr"></div><button class="btn primary" onclick="goRed()">进入红军行动 →</button>';
+}
+function goRed(){S.phase='red';render()}
+
+function redHtml(){
+ var h='<span class="tag tag-red">红军玩家</span><div style="font-size:15px;font-weight:500;margin:8px 0 4px">选择本回合选项卡（已保密）</div><div class="grid2" style="margin-top:8px">';
+ RED_CARDS.forEach(function(c){
+  h+='<div class="card'+(S.redPick===c.id?' sel':'')+'" onclick="S.redPick='+c.id+';render()"><div class="row" style="justify-content:space-between"><span style="font-size:14px;font-weight:500">'+c.id+'. '+c.n+'</span><span class="tag tag-red num">-'+c.d.toFixed(1)+'</span></div><div style="font-size:12px;color:var(--kimi-color-text-tertiary);margin-top:2px">'+c.s+'</div><div style="font-size:12px;color:var(--kimi-color-text-quaternary);margin-top:2px">'+c.f+'</div></div>'});
+ h+='</div><div class="hr"></div><button class="btn primary" '+(S.redPick?'':'disabled')+' onclick="goWhite()">暗置出牌，进入白军行动 →</button>';
+ return '<div style="position:relative">'+h+cover('红军秘密选卡','请仅由红军玩家点击揭晓')+'</div>';
+}
+function goWhite(){log('第'+S.round+'回合：红军暗置出牌。');S.phase='white';render()}
+
+function whiteHtml(){
+ var h='<span class="tag tag-gray">白军玩家</span><div style="font-size:15px;font-weight:500;margin:8px 0 4px">打出一张手牌，或游说军阀（已保密）</div><div class="grid2" style="margin-top:8px">';
+ WHITE_CARDS.forEach(function(c){
+  var used=S.usedW[c.id];
+  h+='<div class="card'+(used?' dis':'')+(S.whitePick===c.id?' sel':'')+'" '+(used?'':('onclick="S.whitePick=\''+c.id+'\';S.persuade=false;render()"'))+'><div style="font-size:14px;font-weight:500">'+c.n+(used?'（已用）':'')+'</div><div style="font-size:12px;color:var(--kimi-color-text-tertiary);margin-top:2px">'+c.d+'</div></div>'});
+ h+='<div class="card'+(S.persuade?' sel':'')+'" onclick="S.persuade=true;S.whitePick=null;render()"><div style="font-size:14px;font-weight:500">游说军阀</div><div style="font-size:12px;color:var(--kimi-color-text-tertiary);margin-top:2px">放弃出牌，本回合出动的军阀必定帮助白军（出局，军阀损失 +1）</div></div></div>';
+ h+='<div class="hr"></div><button class="btn primary" '+((S.whitePick||S.persuade)?'':'disabled')+' onclick="goAfterWhite()">确认行动 →</button>';
+ return '<div style="position:relative">'+h+cover('白军秘密行动','请仅由白军玩家点击揭晓')+'</div>';
+}
+function goAfterWhite(){
+ if(S.whitePick){S.usedW[S.whitePick]=1;log('第'+S.round+'回合：白军打出「'+WHITE_CARDS.filter(function(c){return c.id===S.whitePick})[0].n+'」。');}
+ else log('第'+S.round+'回合：白军放弃出牌，游说'+WARLORDS[S.round-1].n+'。');
+ S.phase=(S.round<=3)?'warlord':'intel';if(!S.mass&&S.phase==='intel'){doSettle();return}
+ if(S.phase==='intel'&&S.massacre&&S.whitePick==='D'){/* D already killed masses */} render();
+}
+
+function warlordHtml(){
+ var w=WARLORDS[S.round-1];
+ var h='<span class="tag tag-purple">军阀动向</span><div style="font-size:15px;font-weight:500;margin:8px 0 4px">第 '+S.round+' 回合出动：'+w.n+'</div>'
+ +'<div style="font-size:13px;color:var(--kimi-color-text-secondary)">'+w.t+'</div>'
+ +(S.persuade?'<div style="margin-top:8px;font-size:13px;color:var(--kimi-color-warning)">白军已游说：该军阀必定帮助白军。</div>':'')
+ +'<div class="hr"></div><div class="row" style="gap:8px">'
+ +(S.persuade
+   ?'<button class="btn primary" onclick="warlordAct(true)">帮助白军：军阀出局，损失 +1，红军 -0.5</button>'
+   :'<button class="btn primary" onclick="warlordAct(true)">帮助白军：出局，军阀损失 +1，红军 -0.5</button><button class="btn" onclick="warlordAct(false)">'+(w.neutral?'继续中立观望：红军 -0.2':'按兵不动：防线开口，红军 -0.5')+'</button>')
+ +'</div>';
+ return h;
+}
+function warlordAct(help){
+ S.wHelp=help;
+ if(help){S.loss+=1;log(WARLORDS[S.round-1].n+'帮助白军，出局（军阀损失 +1）。');}
+ else log(WARLORDS[S.round-1].n+(WARLORDS[S.round-1].neutral?'保持中立观望。':'按兵不动，防线开口。'));
+ S.phase=S.mass?'intel':'settle';if(S.phase==='settle'){doSettle();return}render();
+}
+
+function intelHtml(){
+ return '<span class="tag tag-green">群众情报</span><div style="font-size:15px;font-weight:500;margin:8px 0 4px">掷 1d6 判定情报归属</div>'
+ +'<div style="font-size:13px;color:var(--kimi-color-text-secondary)">1–3 红军成功：本回合「拖住」降为 -0.8，红军 +0.2；4–6 白军成功：红军 -0.2。</div>'
+ +'<div class="row" style="gap:16px;margin-top:12px;align-items:center"><div class="dice num" id="diceFace">?</div>'
+ +'<button class="btn primary" id="rollBtn" onclick="roll()">掷骰</button></div><div id="intelOut" style="margin-top:8px;font-size:13px"></div>';
+}
+function roll(){
+ var v=1+Math.floor(Math.random()*6);
+ document.getElementById('diceFace').textContent=v;
+ var red=v<=3;
+ S.intel={v:v,red:red};
+ document.getElementById('intelOut').innerHTML=(red?'<span class="tag tag-red">红军群众成功</span> 拖住效果降低，红军 +0.2':'<span class="tag tag-gray">白军群众成功</span> 红军再 -0.2')+'　<button class="btn primary sm" onclick="doSettle()">进入结算 →</button>';
+ document.getElementById('rollBtn').disabled=true;
+ log('群众情报 1d6 = '+v+'，'+(red?'红军成功':'白军成功')+'。');
+}
+
+function doSettle(){
+ var items=[],ded=0;
+ var rc=RED_CARDS.filter(function(c){return c.id===S.redPick})[0];
+ items.push(['红军选项「'+rc.n+'」',rc.d]);ded+=rc.d;
+ if(S.whitePick==='A'){var d=(S.intel&&S.intel.red)?0.8:1.0;items.push(['白军「拖住、耗住、压住」'+(S.intel&&S.intel.red?'（情报干扰）':''),d]);ded+=d}
+ if(S.whitePick==='B'){var d=S.redPick===6?0.2:((S.redPick===4||S.redPick===5||S.redPick===8)?1.2:0.4);items.push(['白军「一起上」对选 '+S.redPick,d]);ded+=d}
+ if(S.whitePick==='C'){var d=(S.redPick===2||S.redPick===4||S.redPick===5)?1.2:0.5;items.push(['白军「飞机轰炸」对选 '+S.redPick,d]);ded+=d}
+ if(S.round<=3){var wd=S.wHelp?0.5:(WARLORDS[S.round-1].neutral?0.2:0.5);items.push([WARLORDS[S.round-1].n+(S.wHelp?'帮助白军':'未助白军'),wd]);ded+=wd}
+ if(S.whitePick==='D'){S.mass=false;S.massacre=true;log('白军灭杀群众，群众出局！');}
+ if(S.intel){if(S.intel.red){ded-=0.2;items.push(['群众情报（红军成功）',-0.2])}else{ded+=0.2;items.push(['群众情报（白军成功）',0.2])}}
+ if(S.massacre){ded=ded*0.75;items.push(['灭杀群众：本回合扣分 ×0.75',null])}
+ ded=r1(ded);
+ S.red=r1(Math.min(8.5,S.red-ded));
+ S.calc={items:items,ded:ded};
+ log('结算：本回合净扣 '+ded.toFixed(1)+'，红军剩余 '+S.red.toFixed(1)+'。');
+ S.phase='settle';render();
+}
+
+function settleHtml(){
+ var c=S.calc,h='<span class="tag tag-gray">回合结算</span><div style="font-size:15px;font-weight:500;margin:8px 0 8px">第 '+S.round+' 回合战损</div>';
+ c.items.forEach(function(it){h+='<div class="kv"><span style="color:var(--kimi-color-text-secondary)">'+it[0]+'</span><span class="num" style="font-weight:500">'+(it[1]===null?'':(it[1]>0?'-':'+')+Math.abs(it[1]).toFixed(1))+'</span></div>'});
+ h+='<div class="kv" style="margin-top:4px"><span style="font-weight:500">净扣减</span><span class="num" style="font-weight:500">-'+c.ded.toFixed(1)+'</span></div>';
+ h+='<div class="kv"><span style="font-weight:500">红军现有兵力</span><span class="num tag tag-red" style="font-weight:500">'+S.red.toFixed(1)+'</span></div>';
+ h+='<div class="hr"></div><button class="btn primary" onclick="nextRound()">'+(S.round<4?'进入第 '+(S.round+1)+' 回合 →':'终局判定 →')+'</button>';
+ return h;
+}
+function nextRound(){
+ if(S.round<4){S.round++;S.phase='event';S.redPick=null;S.whitePick=null;S.persuade=false;S.intel=null;S.wHelp=null;S.ev=EVENTS[Math.floor(Math.random()*EVENTS.length)];render();return}
+ var morale=0;
+ if(!S.massacre&&S.red<4.8){morale=0.3;S.red=r1(S.red-0.3)}
+ var final=S.red,winner,desc;
+ if(final>2){winner='红军胜利';desc='中央红军突破湘江封锁，主力成功西进。';}
+ else if(final<=3.5&&S.loss>1){winner='白军胜利';desc='红军兵力损耗殆尽，且军阀出力合围，被围歼于湘江以东。';}
+ else{winner='僵局';desc='红军未能达成西进目标，白军亦未完成合围，战场陷入对峙。';}
+ var h='<div style="text-align:center;padding:8px 0"><div style="font-size:26px;font-weight:500">'+winner+'</div><div style="font-size:13px;color:var(--kimi-color-text-secondary);margin-top:4px">'+desc+'</div></div>'
+ +'<div class="kv"><span style="color:var(--kimi-color-text-secondary)">最终红军兵力</span><span class="num" style="font-weight:500">'+final.toFixed(1)+'（胜利线 &gt; 2）</span></div>'
+ +'<div class="kv"><span style="color:var(--kimi-color-text-secondary)">军阀总损失</span><span class="num" style="font-weight:500">'+S.loss+'（白军需 &gt; 1）</span></div>'
+ +(morale?'<div class="kv"><span style="color:var(--kimi-color-text-secondary)">士气低落惩罚</span><span class="num" style="font-weight:500">-0.3</span></div>':'')
+ +(S.massacre?'<div class="kv"><span style="color:var(--kimi-color-text-secondary)">屠杀群众</span><span style="color:var(--kimi-color-danger)">士气惩罚未触发</span></div>':'')
+ +'<div class="hr"></div><button class="btn primary" onclick="restart()">再战一局</button>';
+ log('终局：'+winner+'（红军 '+final.toFixed(1)+'，军阀损失 '+S.loss+'）。');
+ document.getElementById('panel').innerHTML=h;
+ document.getElementById('log').innerHTML=S.log.map(function(t){return '<div>· '+t+'</div>'}).join('');
+}
+restart();
+</script>
+
+</body>
+</html>
